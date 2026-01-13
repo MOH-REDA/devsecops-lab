@@ -1,61 +1,35 @@
-from flask import Flask, request, jsonify
-import sqlite3
-import bcrypt
-import os
-
+from flask import Flask, request
+import hashlib
+import subprocess
 app = Flask(__name__)
-
-DB_PATH = "users.db"
-
-
-def get_db():
-    return sqlite3.connect(DB_PATH)
-
-
-@app.route("/login", methods=["POST"])
+# Mot de passe en dur (mauvaise pratique)
+ADMIN_PASSWORD = "123456"
+# Cryptographie faible (MD5)
+def hash_password(password):
+    return hashlib.md5(password.encode()).hexdigest()
+@app.route("/login")
 def login():
-    data = request.get_json()
-
-    if not data or "username" not in data or "password" not in data:
-        return jsonify({"error": "Invalid input"}), 400
-
-    username = data["username"]
-    password = data["password"].encode()
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        "SELECT password FROM users WHERE username = ?",
-        (username,)
+    username = request.args.get("username")
+    password = request.args.get("password")
+    # Authentification faible
+    if username == "admin" and hash_password(password) == hash_password(ADMIN_PASSWORD):
+        return "Logged in"
+    return "Invalid credentials"
+@app.route("/ping")
+def ping():
+    host = request.args.get("host", "localhost")
+    # Injection de commande (shell=True)
+    result = subprocess.check_output(
+    f"ping -c 1 {host}",
+    shell=True
     )
-
-    row = cursor.fetchone()
-    conn.close()
-
-    if row and bcrypt.checkpw(password, row[0]):
-        return jsonify({"status": "success", "user": username})
-
-    return jsonify({"status": "error", "message": "Invalid credentials"}), 401
-
-
-@app.route("/hash", methods=["POST"])
-def hash_password():
-    data = request.get_json()
-
-    if not data or "password" not in data:
-        return jsonify({"error": "Invalid input"}), 400
-
-    pwd = data["password"].encode()
-    hashed = bcrypt.hashpw(pwd, bcrypt.gensalt())
-
-    return jsonify({"bcrypt": hashed.decode()})
-
-
-@app.route("/health", methods=["GET"])
-def health():
-    return jsonify({"status": "ok"})
-
-
+    return result
+@app.route("/hello")
+def hello():
+    name = request.args.get("name", "user")
+    # XSS potentiel
+    return f"<h1>Hello {name}</h1>"
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+
+# Debug activé
+    app.run(debug=True)
